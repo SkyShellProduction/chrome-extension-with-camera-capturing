@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Desk Time Tracker — статистика</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    main { max-width: 1000px; margin: 24px auto 60px; padding: 0 20px; }
+    .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+    .bars { display: flex; gap: 6px; align-items: flex-end; height: 160px; padding-top: 10px; }
+    .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; cursor: pointer; min-width: 0; }
+    .bar .stack { display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+    .bar .lbl { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; white-space: nowrap; }
+    .bar.sel .lbl { color: var(--fg); font-weight: 700; }
+    .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 760px) { .cols, .tiles { grid-template-columns: 1fr 1fr; } }
+
+    nav.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 16px 0 18px; }
+    nav.tabs a { padding: 9px 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 600; }
+    nav.tabs a.active { color: var(--fg); border-color: var(--accent); }
+    section { display: none; }
+    section.active { display: block; }
+
+    .sites .site { display: grid; grid-template-columns: 200px 1fr 90px; gap: 10px; align-items: center; padding: 3px 0; font-size: 13px; }
+    .sites .track { background: var(--card); border-radius: 4px; height: 12px; overflow: hidden; }
+    .sites .fill { height: 100%; border-radius: 4px; }
+    .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.title { max-width: 380px; }
+    input[type=search], textarea { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+    textarea { width: 100%; min-height: 60px; }
+
+    .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .shot { background: var(--card); border-radius: 10px; overflow: hidden; cursor: zoom-in; }
+    .shot img { width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: top; display: block; background: #000; }
+    .shot .meta { padding: 6px 8px; font-size: 12px; }
+    .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10; padding: 20px; }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: calc(100vh - 130px); border-radius: 6px; }
+    .lightbox .bar2 { color: #fff; display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; justify-content: center; max-width: 100%; }
+    .lightbox .bar2 a { color: #9ec1ff; }
+    .lightbox button { background: #333; color: #fff; border-color: #555; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="row" style="justify-content: space-between;">
+    <div><h1>Desk Time Tracker</h1><div class="muted" id="dayTitle"></div></div>
+    <div class="row">
+      <button id="prev" title="Предыдущий день">←</button><input type="date" id="day"><button id="next" title="Следующий день">→</button>
+      <button id="today">Сегодня</button>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a href="#presence" data-tab="presence">Присутствие</a>
+    <a href="#tabs" data-tab="tabs">Вкладки</a>
+    <a href="#shots" data-tab="shots">Скриншоты</a>
+    <a href="#settings" data-tab="settings">Настройки и данные</a>
+  </nav>
+
+  <!-- ================= ПРИСУТСТВИЕ ================= -->
+  <section id="presence">
+    <div class="tiles">
+      <div class="tile"><div class="v" id="tAtDesk">—</div><div class="k">За компьютером</div></div>
+      <div class="tile"><div class="v" id="tFocused">—</div><div class="k">Смотрел в экран</div></div>
+      <div class="tile"><div class="v" id="tPhone">—</div><div class="k">В телефоне</div></div>
+      <div class="tile"><div class="v" id="tLongest">—</div><div class="k">Самая длинная сессия</div></div>
+      <div class="tile"><div class="v" id="tAvg">—</div><div class="k">Средняя сессия</div></div>
+    </div>
+
+    <h2>Таймлайн дня</h2>
+    <div class="timeline" id="timeline"></div>
+    <div class="axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--present)"></i>за компьютером</span>
+      <span><i class="dot" style="background:var(--phone)"></i>в телефоне</span>
+      <span><i class="dot" style="background:var(--away)"></i>отошёл</span>
+      <span class="muted">пусто — трекер был выключен</span>
+    </div>
+
+    <h2>Последние 14 дней</h2>
+    <div class="bars" id="bars"></div>
+
+    <h2>Сессии и перерывы</h2>
+    <table id="sessions"><thead><tr><th>Время</th><th>Длительность</th><th>Телефон</th><th>Перерыв после</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= ВКЛАДКИ ================= -->
+  <section id="tabs">
+    <div class="tiles">
+      <div class="tile"><div class="v" id="bActive">—</div><div class="k">Браузер в фокусе</div></div>
+      <div class="tile"><div class="v" id="bBlur">—</div><div class="k">Браузер свёрнут / не в фокусе</div></div>
+      <div class="tile"><div class="v" id="bSites">—</div><div class="k">Разных сайтов</div></div>
+      <div class="tile"><div class="v" id="bOpened">—</div><div class="k">Вкладок открыто</div></div>
+      <div class="tile"><div class="v" id="bClosed">—</div><div class="k">Вкладок закрыто</div></div>
+    </div>
+    <div id="tabsOff" class="err small" style="display:none;margin-top:10px;">Учёт вкладок выключен в настройках.</div>
+
+    <h2>Что было на экране браузера</h2>
+    <div class="timeline" id="bTimeline"></div>
+    <div class="axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+    <div class="legend"><span>цвет — сайт (наведите для подробностей)</span>
+      <span><i class="dot" style="background:var(--line)"></i>браузер свёрнут / в другом окне</span>
+      <span class="muted">пусто — пауза (отошли, экран заблокирован) или браузер закрыт</span></div>
+
+    <h2>Сайты по времени</h2>
+    <div class="sites" id="sites"></div>
+
+    <div class="row" style="justify-content: space-between; margin-top: 20px;">
+      <h2 style="margin:0">Журнал вкладок</h2>
+      <input type="search" id="tabFilter" placeholder="Поиск по названию или сайту">
+    </div>
+    <p class="muted small">«Активна» — сколько вкладка была на экране в этот день. «Жила» — от открытия до закрытия.</p>
+    <table id="tablog"><thead><tr><th>Открыта</th><th>Закрыта</th><th>Жила</th><th>Активна</th><th>Страница</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= СКРИНШОТЫ ================= -->
+  <section id="shots">
+    <div class="row" style="justify-content: space-between;">
+      <div class="muted small" id="shotsInfo"></div>
+      <span class="muted small">Снять вручную — кнопкой 📸 в окне расширения</span>
+    </div>
+    <div class="small" id="lastShot" style="margin:8px 0 14px;"></div>
+    <div class="shots" id="shotGrid"></div>
+  </section>
+
+  <!-- ================= НАСТРОЙКИ ================= -->
+  <section id="settings">
+    <div class="cols">
+      <div>
+        <h2>Камера и присутствие</h2>
+        <form id="settingsPresence"></form>
+        <div class="row" style="margin-top:10px;"><button id="setup">Камера / калибровка</button></div>
+      </div>
+      <div>
+        <h2>Вкладки и скриншоты</h2>
+        <form id="settingsTabs"></form>
+        <div style="margin-top:8px;">
+          <div class="small" style="margin-bottom:4px;">Не делать скриншоты на сайтах (через пробел или с новой строки, поддомены учитываются):</div>
+          <textarea id="screenshotExclude" placeholder="bank.uz mail.google.com"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;"><button id="save" class="primary">Сохранить настройки</button></div>
+
+    <h2>Данные</h2>
+    <div class="muted small" id="usage" style="margin-bottom:8px;"></div>
+    <div class="row">
+      <button id="export">Экспорт JSON</button>
+      <button id="import">Импорт JSON</button>
+      <button id="clear">Очистить историю</button>
+      <button id="clearShots">Удалить все скриншоты</button>
+    </div>
+    <div class="row small" style="margin-top:8px;">
+      <select id="importMode">
+        <option value="merge">Объединить с текущей историей</option>
+        <option value="replace">Заменить текущую историю</option>
+      </select>
+      <label><input type="checkbox" id="importSettings"> и настройки из файла</label>
+    </div>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+    <div class="small" id="importResult" style="margin-top:8px;"></div>
+    <p class="muted small">Экспорт включает присутствие, активность во вкладках и журнал вкладок. Скриншоты в JSON не попадают — их можно скачать по одному из галереи.</p>
+  </section>
+</main>
+
+<div class="lightbox" id="lightbox">
+  <img id="lbImg" alt="">
+  <div class="bar2">
+    <button id="lbPrev">←</button>
+    <span id="lbMeta" class="ellipsis" style="max-width:60vw"></span>
+    <button id="lbNext">→</button>
+    <a id="lbDownload" download>Скачать</a>
+    <button id="lbDelete">Удалить</button>
+    <button id="lbClose">Закрыть (Esc)</button>
+  </div>
+</div>
+
+<script type="module" src="stats.js"></script>
+</body>
+</html>

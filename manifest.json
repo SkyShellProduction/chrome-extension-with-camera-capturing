@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Desk Time Tracker",
+  "description": "Считает время за компьютером по веб-камере, время во вкладках и делает скриншоты. Всё хранится локально.",
+  "version": "1.2.0",
+  "permissions": [
+    "offscreen",
+    "storage",
+    "idle",
+    "alarms",
+    "unlimitedStorage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Desk Time Tracker"
+  },
+  "options_page": "stats.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
