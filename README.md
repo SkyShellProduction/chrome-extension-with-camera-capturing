@@ -1,105 +1,124 @@
 # Desk Time Tracker
 
-Расширение для Chrome (и других браузеров на Chromium: Edge, Яндекс Браузер, Brave), которое по веб-камере считает,
-сколько вы реально сидите за компьютером, когда уходите на перерыв и сколько времени «за компом» на самом деле уходит на телефон.
+A Chrome extension (also works in other Chromium browsers: Edge, Brave, etc.) that uses the webcam to measure how long
+you actually sit at the computer, when you take breaks, and how much "computer time" really goes to your phone.
+It also records time spent in browser tabs and takes periodic screenshots of the active tab.
 
-Всё работает **локально**: кадры анализируются нейросетями прямо в браузере, никуда не отправляются и не сохраняются.
-В истории хранятся только интервалы вида «10:02–10:47 за компьютером».
+Everything runs **locally**: camera frames are analyzed by neural networks inside the browser and are never stored or sent anywhere.
+Only intervals like "10:02–10:47 at the computer" are saved.
 
-## Установка
+## Installation
 
-1. Распакуйте архив в постоянную папку (например, `Documents\desk-tracker`).
-2. Скачайте модели (~10 МБ):
-   - **Windows:** правый клик по `setup-models.ps1` → «Выполнить с помощью PowerShell»
-     (или `powershell -ExecutionPolicy Bypass -File .\setup-models.ps1`)
+1. Unpack the archive into a permanent folder (e.g. `~/apps/desk-tracker`). Don't move it later: the ID of an unpacked
+   extension depends on its path, and moving it creates a "new" extension with empty history.
+2. Download the models (~10 MB):
    - **macOS / Linux:** `bash setup-models.sh`
-3. Откройте `chrome://extensions`, включите «Режим разработчика» → «Загрузить распакованное расширение» → выберите папку.
-4. Откроется страница настройки: разрешите камеру и нажмите «Запустить и откалибровать», смотря в экран 5 секунд.
-5. Закрепите иконку расширения на панели: на значке будет `ON` / `TEL` / `AFK`.
+   - **Windows:** right-click `setup-models.ps1` → "Run with PowerShell"
+     (or `powershell -ExecutionPolicy Bypass -File .\setup-models.ps1`)
+3. Open `chrome://extensions`, enable Developer mode → "Load unpacked" → select the folder.
+4. The setup page opens: allow camera access and click "Start and calibrate" while looking at the screen for 5 seconds.
+5. Pin the extension icon: the badge shows `ON` / `TEL` / `AFK`.
 
-## Как это устроено
+## How it works
 
 ```
-Service worker (background.js)        хранит историю, вкл/выкл, следит за блокировкой экрана
-        │  создаёт
+Service worker (background.js, activity.js)   history, on/off, screen lock, tabs, screenshots
+        │ creates
         ▼
-Offscreen-документ (offscreen.js)      невидимая страница с <video> из веб-камеры
-        │  раз в секунду кадр →
-        ├─ MediaPipe FaceLandmarker    лицо есть? наклон головы, куда смотрят глаза
-        └─ MediaPipe ObjectDetector    «person» и «cell phone» в кадре (модель EfficientDet, COCO)
+Offscreen document (offscreen.js)             hidden page with a <video> from the webcam
+        │ one frame per second →
+        ├─ MediaPipe FaceLandmarker           face present? head tilt, gaze direction
+        └─ MediaPipe ObjectDetector           "person" and "cell phone" in frame (EfficientDet, COCO)
         │
         ▼
- сырое состояние → сглаживание → present / phone / away → background.js → chrome.storage
+raw state → smoothing → present / phone / away → IndexedDB
 ```
 
-Правила:
-- **Отошёл** — нет ни лица, ни человека в кадре дольше 10 с.
-- **В телефоне** — в кадре виден телефон, а голова или глаза опущены вниз (или лица не видно — уткнулись в телефон) дольше 8 с.
-- **За компьютером** — всё остальное, когда вы в кадре.
-- Состояние меняется, только если новое держится нужное время в ≥75% кадров, — так одиночные ошибки модели не дёргают статистику.
-- **Сессия** — непрерывное время за компьютером. Отлучки короче 2 минут (настраивается) не считаются перерывом.
-- При блокировке экрана (Win+L) камера выключается, время записывается как «отошёл».
+Rules:
+- **Away**: no face and no person in frame for more than 10 s.
+- **On the phone**: a phone is visible and the head or eyes are turned down (or the face is hidden) for more than 8 s.
+- **At the computer**: everything else while you're in frame.
+- The state changes only if the new one holds in ≥75% of frames for the configured time, so single model mistakes don't flip it.
+- **Session**: continuous time at the computer. Absences shorter than 2 minutes (configurable) don't count as breaks.
+- When the screen is locked, the camera turns off and the time is recorded as "away".
+- After sleep, a frozen or disconnected camera is reopened automatically.
 
-## Настройка точности
+## Tabs and screenshots
 
-В попапе раскройте «Что видит модель прямо сейчас» — там живые сигналы:
-`наклон головы`, `глаза вниз`, `телефон`. Посмотрите на них, когда сидите нормально и когда смотрите в телефон, и подстройте пороги на странице «Статистика и настройки».
+**Tabs.** The extension records:
+- which tab you were looking at and for how long (only while it's the active tab in a focused window);
+- when the browser is minimized or you're in another app (gray on the timeline);
+- a tab log: when each tab was opened and closed, its lifetime, time on screen and number of pages visited.
 
-- Телефон часто держат ниже камеры, и его не видно → включите «Считать долгий взгляд вниз телефоном».
-  Минус: чтение бумажных записей или взгляд на клавиатуру тоже засчитается.
-- Если пересели или переставили камеру — сделайте калибровку заново.
+Tab time is paused when the camera sees you're away or the screen is locked.
 
-## Вкладки и скриншоты (с версии 1.2)
+**Screenshots.** Every N minutes (10 by default) the visible part of the active tab is captured and downscaled to 1280 px JPEG
+(~50–150 KB). Screenshots are skipped when the browser is minimized, the screen is locked, you're away (per camera),
+an extension page is open, or the site is in the exclusion list. `chrome://` pages and the Chrome Web Store can't be captured.
+Take one manually with the 📸 button in the popup. The gallery is in the Screenshots tab of the stats page.
 
-**Вкладки.** Расширение записывает:
-- какую вкладку вы смотрели и сколько: время идёт, только пока вкладка активна в окне, которое в фокусе;
-- когда браузер свёрнут или вы в другом приложении (серый цвет на таймлайне);
-- журнал вкладок: когда открыта, когда закрыта, сколько «жила», сколько была на экране, сколько страниц в ней открывали.
+Screenshots capture everything on screen, including chats and banking pages. Add such sites to the exclusion list.
 
-Если камера видит, что вы отошли, или экран заблокирован, учёт вкладок ставится на паузу, и включённый YouTube без вас не засчитается.
+Screenshots use `chrome.alarms`, not `setInterval`, so they keep working after Chrome unloads the idle service worker.
 
-**Скриншоты.** Раз в N минут (по умолчанию 10) снимается видимая часть активной вкладки, затем уменьшается до 1280px в JPEG (~50–150 КБ).
-Скриншот не делается, когда браузер свёрнут, экран заблокирован, вы отошли (по камере), открыта страница самого расширения
-или сайт в списке исключений. Страницы `chrome://` и магазин расширений Chrome снимать не даёт.
-Вручную — кнопка 📸 в окне расширения. Галерея по дням — во вкладке «Скриншоты» на странице статистики.
+**Permissions:** `tabs` for tab URLs and titles; `<all_urls>` to capture screenshots on a timer without clicking the icon.
+Because of this, Chrome shows the warning "Read and change all your data on all websites". The extension does not read or
+modify page content, but technically it could.
 
-На скриншоты попадает всё, что было на экране, включая переписки и банковские страницы. Добавьте такие сайты в исключения.
+## Tuning accuracy
 
-**Разрешения:** `tabs` — адреса и заголовки вкладок; `<all_urls>` — делать скриншоты по таймеру без нажатия на значок.
-Из-за этого Chrome показывает предупреждение «Чтение и изменение всех данных на сайтах». Расширение не читает и не меняет
-содержимое страниц, но технически такая возможность у него есть.
+In the popup, expand "What the model sees right now" to see live signals: head tilt, eyes down, phone.
+Compare them while sitting normally and while looking at your phone, then adjust thresholds on the stats page.
 
-## Где хранятся данные
+- A phone held below the camera often isn't visible → enable "Count a long look down as phone use".
+  Downside: reading paper notes or looking at the keyboard will count too.
+- If you change your seat or move the camera, calibrate again.
 
-- **История** (присутствие, вкладки, журнал вкладок, скриншоты) — в IndexedDB браузера (база `desk-tracker`), с разрешением `unlimitedStorage`, то есть без лимита по размеру.
-  Каждый интервал — отдельная запись с индексами по времени, поэтому статистика за день читается быстро даже при годах истории.
-- **Настройки** — в `chrome.storage.local`.
-- Физически всё лежит в профиле Chrome (`~/.config/google-chrome/Default/...`).
-- Данные переживают перезапуск браузера и обновление расширения, но **удаляются вместе с расширением**,
-  а также «теряются», если переместить папку распакованного расширения (меняется его ID). Делайте экспорт.
-- **Экспорт / импорт** — на странице статистики. Импорт умеет:
-  - *объединить* — добавить интервалы, которые не пересекаются с уже имеющимися (повторный импорт того же файла ничего не задвоит);
-  - *заменить* — стереть историю и загрузить файл целиком;
-  - по галочке — применить настройки из файла.
-- При обновлении с версии 1.0 история автоматически переносится из `chrome.storage` в IndexedDB.
+## Where data is stored
 
-## Если что-то не работает
+- **History** (presence, tab activity, tab log, screenshots) lives in the browser's IndexedDB (database `desk-tracker`)
+  with the `unlimitedStorage` permission, so there's no size limit.
+- **Settings** live in `chrome.storage.local`.
+- Both are inside the Chrome profile (`~/.config/google-chrome/Default/...` on Linux).
+- Data survives browser restarts and extension updates, but **is deleted together with the extension**
+  and "disappears" if you move the unpacked extension folder. Export regularly.
+- **Export / import** is on the stats page. Import can:
+  - *merge*: add only records that don't overlap existing ones (importing the same file twice won't duplicate anything);
+  - *replace*: wipe history and load the file;
+  - optionally apply settings from the file.
+- History from v1.0 is moved from `chrome.storage` to IndexedDB automatically.
 
-- **«Не найдены файлы моделей»** — не запущен `setup-models`, или после него не нажали «Обновить» на `chrome://extensions`.
-- **Ошибка камеры** — камера занята другим приложением (Zoom, Teams) или разрешение не выдано: откройте страницу настройки.
-- **Ошибка про `unsafe-eval` / WebAssembly** — проверьте, что в `manifest.json` осталось `'wasm-unsafe-eval'`.
-- Логи offscreen-документа: `chrome://extensions` → Desk Time Tracker → «Проверить представления: offscreen.html».
+## Using the camera in other apps (Linux)
 
-## Файлы
+Chrome shares the camera between its own tabs (e.g. Google Meet works alongside the tracker), but a separate app like
+Zoom will see a black screen while Chrome holds the camera. A virtual camera fixes this:
 
-| Файл | Что делает |
+```bash
+sudo apt install v4l2loopback-dkms v4l-utils ffmpeg
+sudo modprobe v4l2loopback devices=1 video_nr=10 card_label="Shared Cam" exclusive_caps=1
+ffmpeg -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30 -i /dev/video0 \
+       -pix_fmt yuv420p -f v4l2 /dev/video10
+```
+
+Then pick "Shared Cam" in `chrome://settings/content/camera` and in Zoom.
+
+## Troubleshooting
+
+- **"Model files not found"**: `setup-models` wasn't run, or you didn't click Reload on `chrome://extensions` afterwards.
+- **Camera error**: the camera is busy in another app (Zoom, Teams) or permission wasn't granted; open the setup page.
+- **`unsafe-eval` / WebAssembly error**: make sure `manifest.json` still contains `'wasm-unsafe-eval'`.
+- Offscreen document logs: `chrome://extensions` → Desk Time Tracker → "Inspect views: offscreen.html".
+
+## Files
+
+| File | Purpose |
 |---|---|
-| `manifest.json` | Manifest V3, разрешения: offscreen, storage, idle, alarms |
-| `background.js` | старт/стоп, запись интервалов, блокировка экрана, перезапуск при сбое |
-| `offscreen.js` | камера + модели + логика определения состояния |
-| `common.js` | настройки по умолчанию и расчёт сессий/перерывов |
-| `db.js` | IndexedDB: запись, выборка по датам, импорт, очистка |
-| `activity.js` | вкладки, фокус браузера, скриншоты |
-| `popup.*` | быстрый взгляд на сегодня |
-| `stats.*` | разделы: присутствие, вкладки, скриншоты, настройки и данные |
-| `setup.*` | первый запуск: проверка моделей, доступ к камере, калибровка |
+| `manifest.json` | Manifest V3, permissions: offscreen, storage, idle, alarms, unlimitedStorage, tabs |
+| `background.js` | start/stop, presence intervals, screen lock, recovery after crashes |
+| `activity.js` | tabs, browser focus, screenshots |
+| `offscreen.js` | camera, models and state detection |
+| `common.js` | default settings, session and break calculation |
+| `db.js` | IndexedDB: writes, date-range queries, import, cleanup |
+| `popup.*` | quick view of today |
+| `stats.*` | sections: presence, tabs, screenshots, settings and data |
+| `setup.*` | first run: model check, camera access, calibration |

@@ -1,10 +1,9 @@
-// Хранилище в IndexedDB. Хранилища (object stores):
-//  segments — присутствие по камере: { id, s: 'present'|'phone'|'away', start, end, open }
-//  activity — что было на экране браузера: { id, kind: 'tab'|'blur', tabRec, url, domain, title, start, end, open }
-//             kind 'blur' = браузер свернут / не в фокусе
-//  tablog   — жизнь вкладок: { id, tabId, openedAt, closedAt, end, url, title, domain, activeMs, pages, restored }
-//             end = closedAt для закрытых и Infinity для открытых (нужно для индекса)
-//  shots    — скриншоты: { id, ts, url, title, domain, blob, w, h, size }
+// IndexedDB object stores:
+//  segments: camera presence  { id, s: 'present'|'phone'|'away', start, end, open }
+//  activity: browser screen   { id, kind: 'tab'|'blur', tabRec, url, domain, title, start, end, open }
+//  tablog:   tab lifetimes    { id, tabId, openedAt, closedAt, end, url, title, domain, activeMs, pages, restored }
+//            end = closedAt, or Infinity while the tab is open (so it can be indexed)
+//  shots:    screenshots      { id, ts, url, title, domain, blob, w, h, size }
 
 const DB_NAME = 'desk-tracker';
 const DB_VERSION = 2;
@@ -52,11 +51,10 @@ async function tx(store, mode, fn) {
     Promise.resolve(fn(t.objectStore(store))).then(v => { result = v; }, e => { try { t.abort(); } catch {} reject(e); });
     t.oncomplete = () => resolve(result);
     t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error || new Error('Транзакция отменена'));
+    t.onabort = () => reject(t.error || new Error('Transaction aborted'));
   });
 }
 
-// ---------- универсальные операции ----------
 export const put = (store, obj) => tx(store, 'readwrite', st => req(st.put(obj)));
 export const get = (store, id) => tx(store, 'readonly', st => req(st.get(id)));
 export const del = (store, id) => tx(store, 'readwrite', st => req(st.delete(id)));
@@ -69,19 +67,17 @@ export async function getAllIn(store) {
   return list.sort((a, b) => a[key] - b[key]);
 }
 
-// Записи-интервалы, пересекающиеся с [from, to)
+// Intervals overlapping [from, to)
 export async function overlapping(store, from, to) {
   const startKey = store === 'tablog' ? 'openedAt' : 'start';
   const list = await tx(store, 'readonly', st => req(st.index('end').getAll(IDBKeyRange.lowerBound(from, true))));
   return list.filter(x => x[startKey] < to).sort((a, b) => a[startKey] - b[startKey]);
 }
 
-// Записи с index в [from, to)
 export function inRange(store, index, from, to) {
   return tx(store, 'readonly', st => req(st.index(index).getAll(IDBKeyRange.bound(from, to, false, true))));
 }
 
-// Удалить записи, у которых index < cutoff
 export function deleteBefore(store, index, cutoff) {
   return tx(store, 'readwrite', st => new Promise((resolve, reject) => {
     let n = 0;
@@ -95,12 +91,10 @@ export function deleteBefore(store, index, cutoff) {
   }));
 }
 
-// Последняя по времени начала запись
 export function lastIn(store) {
   return tx(store, 'readonly', st => req(st.index('start').openCursor(null, 'prev')).then(c => (c ? c.value : null)));
 }
 
-// Байты скриншотов (без загрузки самих картинок в память)
 export function shotsStats() {
   return tx('shots', 'readonly', st => new Promise((resolve, reject) => {
     let n = 0, bytes = 0;
@@ -114,7 +108,7 @@ export function shotsStats() {
   }));
 }
 
-// ---------- совместимость с версией 1.1 (присутствие) ----------
+// Presence shortcuts
 export const getLast = () => lastIn('segments');
 export const putSegment = (seg) => put('segments', seg);
 export const deleteSegment = (id) => del('segments', id);
@@ -124,13 +118,13 @@ export const count = () => countIn('segments');
 export const clearAll = async () => { for (const s of ['segments', 'activity', 'tablog']) await clearStore(s); };
 export const deleteOlderThan = (cutoff) => deleteBefore('segments', 'end', cutoff);
 
-// ---------- импорт ----------
+// Import
 const num = (x) => Number(x);
 const okInterval = (start, end) => Number.isFinite(start) && Number.isFinite(end) && end > start;
 
 export function normalizeImported(data) {
   const raw = Array.isArray(data) ? data : data?.segments;
-  if (!Array.isArray(raw)) throw new Error('В файле нет списка segments');
+  if (!Array.isArray(raw)) throw new Error('The file has no segments list');
   const out = { segments: [], activity: [], tablog: [], bad: 0 };
 
   for (const s of raw) {
@@ -140,7 +134,7 @@ export function normalizeImported(data) {
   }
   for (const a of (Array.isArray(data?.activity) ? data.activity : [])) {
     const start = num(a?.start), end = num(a?.end);
-    if (end === start) continue; // пустой интервал (только что начатый) — просто пропускаем
+    if (end === start) continue;
     if (!['tab', 'blur'].includes(a?.kind) || !okInterval(start, end)) { out.bad++; continue; }
     out.activity.push({ kind: a.kind, url: a.url || '', domain: a.domain || '', title: a.title || '', start, end, open: false });
   }
@@ -148,7 +142,7 @@ export function normalizeImported(data) {
     const openedAt = num(t?.openedAt);
     const closedAt = t?.closedAt == null ? null : num(t.closedAt);
     if (!Number.isFinite(openedAt)) { out.bad++; continue; }
-    // открытые в момент экспорта вкладки считаем закрытыми в момент экспорта
+    // Tabs open at export time are treated as closed at export time
     const end = Number.isFinite(closedAt) ? closedAt : num(data?.exportedAtMs) || openedAt;
     out.tablog.push({
       tabId: t.tabId ?? null, openedAt, closedAt: end, end, url: t.url || '', title: t.title || '',
@@ -160,7 +154,7 @@ export function normalizeImported(data) {
   return out;
 }
 
-// Оставить только интервалы, не пересекающиеся с existing (оба списка отсортированы по start)
+// Keep only intervals that don't overlap existing ones (both lists sorted by start)
 function nonOverlapping(list, existing) {
   const starts = existing.map(e => e.start);
   const overlaps = (seg) => {
@@ -186,7 +180,7 @@ async function writeAll(store, list, replace) {
   });
 }
 
-// mode: 'merge' | 'replace'. Возвращает { added, skipped } по всем типам данных
+// mode: 'merge' | 'replace'. In replace mode only data types present in the file are replaced.
 export async function importAll(data, mode) {
   const replace = mode === 'replace';
   let added = 0, skipped = 0;
@@ -203,7 +197,6 @@ export async function importAll(data, mode) {
     added += list.length;
   }
 
-  // В режиме "заменить" заменяются только те типы данных, что есть в файле
   if (data.tablog.length) {
     let list = data.tablog;
     if (!replace) {
@@ -219,7 +212,6 @@ export async function importAll(data, mode) {
   return { added, skipped };
 }
 
-// Совместимость: импорт только присутствия
 export async function importSegments(segments, mode) {
   return importAll({ segments, activity: [], tablog: [] }, mode);
 }

@@ -1,14 +1,13 @@
-import { getSettings, saveSettings, getSegments, computeStats, clipSegments, dayBounds, fmtDur, fmtTime, STATE_COLORS } from './common.js';
+import { getSettings, saveSettings, getSegments, computeStats, clipSegments, dayBounds, fmtDur, fmtTime, STATE_COLORS, LOCALE } from './common.js';
 import * as db from './db.js';
 
 const $ = (id) => document.getElementById(id);
 let selected = new Date();
 let activeTab = 'presence';
 
-// Заголовки страниц приходят с сайтов — экранируем перед вставкой в HTML
+// Page titles come from websites: escape before inserting into HTML
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Стабильный цвет для домена
 function domainColor(domain) {
   let h = 0;
   for (const ch of domain || '?') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -16,28 +15,28 @@ function domainColor(domain) {
 }
 
 const PRESENCE_FIELDS = [
-  ['awayDelaySec', 'Через сколько секунд без вас считать «отошёл»', 1, 110, 1],
-  ['phoneDelaySec', 'Через сколько секунд с телефоном считать «в телефоне»', 1, 110, 1],
-  ['returnDelaySec', 'Через сколько секунд засчитать возвращение', 1, 60, 1],
-  ['minBreakSec', 'Минимальный перерыв, сек (короче — не прерывает сессию)', 10, 3600, 10],
-  ['phoneThreshold', 'Порог уверенности «телефон в кадре» (0–1)', 0.1, 0.9, 0.05],
-  ['eyeDownThreshold', 'Порог «глаза смотрят вниз» (0–1)', 0.2, 0.95, 0.05],
-  ['pitchDelta', 'Чувствительность к наклону головы (меньше — чувствительнее)', 0.01, 0.2, 0.01],
-  ['intervalMs', 'Интервал анализа кадров, мс', 300, 5000, 100],
-  ['keepDays', 'Хранить историю (присутствие и вкладки), дней', 7, 3650, 1]
+  ['awayDelaySec', 'Seconds without you before "away"', 1, 110, 1],
+  ['phoneDelaySec', 'Seconds with a phone before "on the phone"', 1, 110, 1],
+  ['returnDelaySec', 'Seconds before counting a return', 1, 60, 1],
+  ['minBreakSec', 'Minimum break, s (shorter absences don\'t end a session)', 10, 3600, 10],
+  ['phoneThreshold', '"Phone in frame" confidence threshold (0–1)', 0.1, 0.9, 0.05],
+  ['eyeDownThreshold', '"Eyes looking down" threshold (0–1)', 0.2, 0.95, 0.05],
+  ['pitchDelta', 'Head tilt sensitivity (lower = more sensitive)', 0.01, 0.2, 0.01],
+  ['intervalMs', 'Frame analysis interval, ms', 300, 5000, 100],
+  ['keepDays', 'Keep history (presence and tabs), days', 7, 3650, 1]
 ];
-const PRESENCE_CHECKS = [['lookDownCountsAsPhone', 'Считать долгий взгляд вниз телефоном, даже если телефон не виден в кадре']];
+const PRESENCE_CHECKS = [['lookDownCountsAsPhone', 'Count a long look down as phone use even if no phone is visible']];
 
 const TAB_FIELDS = [
-  ['screenshotIntervalMin', 'Скриншот каждые, мин', 1, 240, 1],
-  ['shotsKeepDays', 'Хранить скриншоты, дней', 1, 3650, 1],
-  ['screenshotMaxWidth', 'Ширина скриншота, px', 640, 3840, 10],
-  ['screenshotQuality', 'Качество JPEG (0.3–0.95)', 0.3, 0.95, 0.05]
+  ['screenshotIntervalMin', 'Screenshot every, min', 1, 240, 1],
+  ['shotsKeepDays', 'Keep screenshots, days', 1, 3650, 1],
+  ['screenshotMaxWidth', 'Screenshot width, px', 640, 3840, 10],
+  ['screenshotQuality', 'JPEG quality (0.3–0.95)', 0.3, 0.95, 0.05]
 ];
 const TAB_CHECKS = [
-  ['trackTabs', 'Записывать вкладки и время в браузере'],
-  ['screenshotsEnabled', 'Делать скриншоты активной вкладки'],
-  ['screenshotSkipWhenAway', 'Не делать скриншоты, когда камера видит, что вы отошли']
+  ['trackTabs', 'Record tabs and browser time'],
+  ['screenshotsEnabled', 'Take screenshots of the active tab'],
+  ['screenshotSkipWhenAway', 'Skip screenshots when the camera sees you are away']
 ];
 
 function toInputDate(d) {
@@ -54,7 +53,6 @@ function timelineHtml(items, from, to, colorOf, titleOf) {
   }).join('');
 }
 
-// ======================= ПРИСУТСТВИЕ =======================
 async function renderPresence() {
   const settings = await getSettings();
   const [from, to] = dayBounds(selected);
@@ -75,11 +73,11 @@ async function renderPresence() {
   tbody.innerHTML = st.sessions.length ? st.sessions.map((s, i) => {
     const br = st.breaks[i];
     const pct = s.end > s.start ? Math.round(s.phone / (s.end - s.start) * 100) : 0;
-    return `<tr><td>${fmtTime(s.start)}–${s.open ? 'сейчас' : fmtTime(s.end)}</td>
+    return `<tr><td>${fmtTime(s.start)}–${s.open ? 'now' : fmtTime(s.end)}</td>
       <td><b>${fmtDur(s.end - s.start)}</b></td>
       <td>${fmtDur(s.phone)} <span class="muted">(${pct}%)</span></td>
       <td class="muted">${br ? fmtDur(br.end - br.start) : ''}</td></tr>`;
-  }).join('') : '<tr><td colspan="4" class="muted">Нет данных за этот день</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="muted">No data for this day</td></tr>';
 
   const days = [];
   for (let i = 13; i >= 0; i--) {
@@ -93,22 +91,21 @@ async function renderPresence() {
     const h = x.atDesk / max * 130;
     const ph = x.atDesk ? x.phone / x.atDesk * h : 0;
     const sel = toInputDate(x.d) === toInputDate(selected) ? 'sel' : '';
-    return `<div class="bar ${sel}" data-i="${i}" title="${fmtDur(x.atDesk)} за компьютером, ${fmtDur(x.phone)} в телефоне">
+    return `<div class="bar ${sel}" data-i="${i}" title="${fmtDur(x.atDesk)} at the computer, ${fmtDur(x.phone)} on the phone">
       <div class="stack"><div style="height:${h - ph}px;background:${STATE_COLORS.present}"></div>
       <div style="height:${ph}px;background:${STATE_COLORS.phone}"></div></div>
-      <div class="lbl">${x.d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'numeric' })}</div></div>`;
+      <div class="lbl">${x.d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'numeric' })}</div></div>`;
   }).join('');
   document.querySelectorAll('.bar').forEach(el => el.onclick = () => { selected = days[+el.dataset.i].d; renderAll(); });
 }
 
-// ======================= ВКЛАДКИ =======================
 async function renderTabs() {
   const settings = await getSettings();
   $('tabsOff').style.display = settings.trackTabs ? 'none' : '';
   const [from, to] = dayBounds(selected);
   const now = Date.now();
 
-  // Открытый интервал обновляется раз в минуту — дотягиваем его до "сейчас" для отображения
+  // The open interval is updated once a minute; extend it to now for display
   const raw = (await db.overlapping('activity', from, Math.max(to, now + 60000)))
     .map(a => (a.open && now - a.end < 180000 ? { ...a, end: now } : a));
   const acts = raw.map(a => ({ ...a, start: Math.max(a.start, from), end: Math.min(a.end, to) })).filter(a => a.end > a.start);
@@ -120,7 +117,7 @@ async function renderTabs() {
   const bySite = new Map();
   const byTabRec = new Map();
   for (const a of tabActs) {
-    const d = a.domain || '(без адреса)';
+    const d = a.domain || '(no address)';
     bySite.set(d, (bySite.get(d) || 0) + a.end - a.start);
     if (a.tabRec) byTabRec.set(a.tabRec, (byTabRec.get(a.tabRec) || 0) + a.end - a.start);
   }
@@ -138,7 +135,7 @@ async function renderTabs() {
   $('bTimeline').innerHTML = timelineHtml(acts, from, to,
     a => (a.kind === 'blur' ? 'var(--line)' : domainColor(a.domain)),
     a => `${fmtTime(a.start)}–${fmtTime(a.end)} · ${fmtDur(a.end - a.start)}\n` +
-      (a.kind === 'blur' ? 'Браузер свёрнут / в другом окне' : `${a.domain}\n${a.title}`));
+      (a.kind === 'blur' ? 'Browser minimized / another window' : `${a.domain}\n${a.title}`));
 
   const sites = [...bySite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
   const top = sites[0]?.[1] || 1;
@@ -146,7 +143,7 @@ async function renderTabs() {
       <span class="ellipsis" title="${esc(d)}">${esc(d)}</span>
       <div class="track"><div class="fill" style="width:${ms / top * 100}%;background:${domainColor(d)}"></div></div>
       <span>${fmtDur(ms)} <span class="muted">${activeMs ? Math.round(ms / activeMs * 100) : 0}%</span></span></div>`).join('')
-    : '<div class="muted">Нет данных за этот день</div>';
+    : '<div class="muted">No data for this day</div>';
 
   const q = $('tabFilter').value.trim().toLowerCase();
   const rows = tabs
@@ -154,24 +151,23 @@ async function renderTabs() {
     .sort((a, b) => b.openedAt - a.openedAt)
     .slice(0, 500);
   const sameDay = (ts) => ts >= from && ts < to;
-  const when = (ts) => sameDay(ts) ? fmtTime(ts) : new Date(ts).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const when = (ts) => sameDay(ts) ? fmtTime(ts) : new Date(ts).toLocaleString(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 
   $('tablog').querySelector('tbody').innerHTML = rows.length ? rows.map(t => {
     const isOpen = t.end === Infinity;
     const life = (isOpen ? now : t.closedAt) - t.openedAt;
     const act = byTabRec.get(t.id) || 0;
     return `<tr>
-      <td>${t.restored ? '<span class="muted" title="Вкладка уже была открыта при запуске браузера/расширения">≤ </span>' : ''}${when(t.openedAt)}</td>
-      <td>${isOpen ? '<span style="color:var(--present)">открыта</span>' : when(t.closedAt)}</td>
+      <td>${t.restored ? '<span class="muted" title="The tab was already open when the browser/extension started">≤ </span>' : ''}${when(t.openedAt)}</td>
+      <td>${isOpen ? '<span style="color:var(--present)">open</span>' : when(t.closedAt)}</td>
       <td>${fmtDur(life)}</td>
       <td><b>${act ? fmtDur(act) : '—'}</b></td>
       <td class="title ellipsis"><i class="dot" style="background:${domainColor(t.domain)}"></i>
-        <span title="${esc(t.url)}">${esc(t.title || t.url || '(без названия)')}</span>
-        <span class="muted small">${esc(t.domain)}${t.pages > 1 ? ` · ${t.pages} стр.` : ''}</span></td></tr>`;
-  }).join('') : '<tr><td colspan="5" class="muted">Нет вкладок за этот день</td></tr>';
+        <span title="${esc(t.url)}">${esc(t.title || t.url || '(untitled)')}</span>
+        <span class="muted small">${esc(t.domain)}${t.pages > 1 ? ` · ${t.pages} pages` : ''}</span></td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="muted">No tabs for this day</td></tr>';
 }
 
-// ======================= СКРИНШОТЫ =======================
 let shotList = [];
 let objectUrls = [];
 let lbIndex = -1;
@@ -185,15 +181,15 @@ async function renderShots() {
   const total = await db.shotsStats();
 
   $('shotsInfo').textContent =
-    `За день: ${shotList.length}. Всего: ${total.n} (${(total.bytes / 1048576).toFixed(1)} МБ). ` +
-    (settings.screenshotsEnabled ? `Автоматически каждые ${settings.screenshotIntervalMin} мин, хранятся ${settings.shotsKeepDays} дн.` : 'Автоматические скриншоты выключены.');
+    `This day: ${shotList.length}. Total: ${total.n} (${(total.bytes / 1048576).toFixed(1)} MB). ` +
+    (settings.screenshotsEnabled ? `Automatic every ${settings.screenshotIntervalMin} min, kept for ${settings.shotsKeepDays} days.` : 'Automatic screenshots are off.');
 
   const { lastShot } = await chrome.storage.local.get('lastShot');
   $('lastShot').innerHTML = lastShot
-    ? `<span class="muted">Последняя попытка в ${fmtTime(lastShot.ts)}: </span>` +
-      (lastShot.ok ? '<span style="color:var(--present)">снято</span>'
-        : lastShot.skipped ? `пропущено — ${esc(lastShot.skipped)}`
-        : `<span style="color:var(--err)">ошибка — ${esc(lastShot.error)}</span>`)
+    ? `<span class="muted">Last attempt at ${fmtTime(lastShot.ts)}: </span>` +
+      (lastShot.ok ? '<span style="color:var(--present)">captured</span>'
+        : lastShot.skipped ? `skipped — ${esc(lastShot.skipped)}`
+        : `<span style="color:var(--err)">error — ${esc(lastShot.error)}</span>`)
     : '';
 
   $('shotGrid').innerHTML = shotList.length ? shotList.map((s, i) => {
@@ -201,7 +197,7 @@ async function renderShots() {
     return `<div class="shot" data-i="${i}"><img loading="lazy" src="${u}" alt="">
       <div class="meta"><b>${fmtTime(s.ts)}</b> <span class="muted">${esc(s.domain)}</span>
       <div class="ellipsis muted" title="${esc(s.title)}">${esc(s.title)}</div></div></div>`;
-  }).join('') : '<div class="muted">Скриншотов за этот день нет</div>';
+  }).join('') : '<div class="muted">No screenshots for this day</div>';
   document.querySelectorAll('.shot').forEach(el => el.onclick = () => openLightbox(+el.dataset.i));
 }
 
@@ -210,7 +206,7 @@ function openLightbox(i) {
   lbIndex = (i + shotList.length) % shotList.length;
   const s = shotList[lbIndex];
   $('lbImg').src = s._url;
-  $('lbMeta').innerHTML = `${new Date(s.ts).toLocaleString('ru-RU')} · <a href="${esc(s.url)}" target="_blank">${esc(s.title || s.url)}</a> · ${(s.size / 1024).toFixed(0)} КБ`;
+  $('lbMeta').innerHTML = `${new Date(s.ts).toLocaleString(LOCALE, { hour12: false })} · <a href="${esc(s.url)}" target="_blank">${esc(s.title || s.url)}</a> · ${(s.size / 1024).toFixed(0)} KB`;
   $('lbDownload').href = s._url;
   $('lbDownload').download = `screenshot-${toInputDate(new Date(s.ts))}-${fmtTime(s.ts).replace(':', '-')}.jpg`;
   $('lightbox').classList.add('open');
@@ -223,7 +219,7 @@ $('lbClose').onclick = closeLightbox;
 $('lightbox').onclick = (e) => { if (e.target === $('lightbox')) closeLightbox(); };
 $('lbDelete').onclick = async () => {
   const s = shotList[lbIndex];
-  if (!s || !confirm('Удалить этот скриншот?')) return;
+  if (!s || !confirm('Delete this screenshot?')) return;
   await db.del('shots', s.id);
   const keep = lbIndex;
   await renderShots();
@@ -236,7 +232,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight') openLightbox(lbIndex + 1);
 });
 
-// ======================= НАСТРОЙКИ =======================
 function fieldsHtml(fields, checks, s) {
   return checks.map(([k, label]) =>
     `<label class="field"><span>${label}</span><input type="checkbox" name="${k}" ${s[k] ? 'checked' : ''}></label>`).join('') +
@@ -268,8 +263,8 @@ $('save').onclick = async () => {
   patch.screenshotExclude = $('screenshotExclude').value.trim();
   await saveSettings(patch);
   chrome.runtime.sendMessage({ type: 'settingsChanged' });
-  $('save').textContent = 'Сохранено ✓';
-  setTimeout(() => ($('save').textContent = 'Сохранить настройки'), 1500);
+  $('save').textContent = 'Saved ✓';
+  setTimeout(() => ($('save').textContent = 'Save settings'), 1500);
   renderSettings();
 };
 
@@ -306,36 +301,36 @@ $('importFile').onchange = async () => {
     const norm = db.normalizeImported(data);
     const mode = $('importMode').value;
     const total = norm.segments.length + norm.activity.length + norm.tablog.length;
-    if (mode === 'replace' && !confirm(`История будет заменена данными из файла (${total} записей). Продолжить?`)) return;
+    if (mode === 'replace' && !confirm(`History will be replaced with the file's data (${total} records). Continue?`)) return;
 
     const { added, skipped } = await db.importAll(norm, mode);
-    let msg = `Импортировано записей: ${added}.`;
-    if (skipped) msg += ` Пропущено (уже есть): ${skipped}.`;
-    if (norm.bad) msg += ` Отброшено некорректных: ${norm.bad}.`;
+    let msg = `Imported records: ${added}.`;
+    if (skipped) msg += ` Skipped (already present): ${skipped}.`;
+    if (norm.bad) msg += ` Invalid, discarded: ${norm.bad}.`;
 
     if ($('importSettings').checked && data.settings && typeof data.settings === 'object') {
-      const { enabled, ...rest } = data.settings; // вкл/выкл трекера не переносим
+      const { enabled, ...rest } = data.settings; // don't import the on/off state
       await saveSettings(rest);
       chrome.runtime.sendMessage({ type: 'settingsChanged' });
-      msg += ' Настройки применены.';
+      msg += ' Settings applied.';
     }
     await chrome.storage.local.set({ lastWrite: Date.now() });
     out.innerHTML = `<span style="color:var(--present)">✓ ${esc(msg)}</span>`;
     renderSettings();
   } catch (e) {
-    out.innerHTML = `<span style="color:var(--err)">Не удалось импортировать: ${esc(e.message)}</span>`;
+    out.innerHTML = `<span style="color:var(--err)">Import failed: ${esc(e.message)}</span>`;
   }
 };
 
 $('clear').onclick = async () => {
-  if (!confirm('Удалить всю историю присутствия и вкладок? Сначала можно сделать экспорт.')) return;
+  if (!confirm('Delete all presence and tab history? You may want to export first.')) return;
   await db.clearAll();
   await chrome.storage.local.set({ lastWrite: Date.now() });
   renderSettings();
 };
 
 $('clearShots').onclick = async () => {
-  if (!confirm('Удалить все скриншоты?')) return;
+  if (!confirm('Delete all screenshots?')) return;
   await db.clearStore('shots');
   renderSettings();
 };
@@ -343,18 +338,17 @@ $('clearShots').onclick = async () => {
 async function renderUsage() {
   const [seg, act, tabs, shots] = await Promise.all([db.countIn('segments'), db.countIn('activity'), db.countIn('tablog'), db.shotsStats()]);
   let size = '';
-  try { size = ` Всего занято ~${((await navigator.storage.estimate()).usage / 1048576).toFixed(1)} МБ.`; } catch {}
-  $('usage').textContent = `Присутствие: ${seg} интервалов · вкладки: ${act} интервалов, ${tabs} в журнале · скриншоты: ${shots.n} (${(shots.bytes / 1048576).toFixed(1)} МБ).${size} Хранилище: IndexedDB, без лимита.`;
+  try { size = ` Total used ~${((await navigator.storage.estimate()).usage / 1048576).toFixed(1)} MB.`; } catch {}
+  $('usage').textContent = `Presence: ${seg} intervals · tabs: ${act} intervals, ${tabs} in the log · screenshots: ${shots.n} (${(shots.bytes / 1048576).toFixed(1)} MB).${size} Storage: IndexedDB, no size limit.`;
 }
 
-// ======================= НАВИГАЦИЯ =======================
 function renderActive() {
   return { presence: renderPresence, tabs: renderTabs, shots: renderShots, settings: renderSettings }[activeTab]();
 }
 
 function renderAll() {
   $('day').value = toInputDate(selected);
-  $('dayTitle').textContent = selected.toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('dayTitle').textContent = selected.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
   return renderActive();
 }
 
@@ -373,7 +367,7 @@ $('today').onclick = () => { selected = new Date(); renderAll(); };
 $('day').onchange = () => { const [y, m, d] = $('day').value.split('-').map(Number); selected = new Date(y, m - 1, d); renderAll(); };
 $('tabFilter').oninput = () => renderTabs();
 
-// Живое обновление (не чаще раза в 2 с). Галерею перерисовываем только при новом скриншоте.
+// Live refresh at most every 2 s; the gallery redraws only on a new screenshot
 let pending = null;
 chrome.storage.onChanged.addListener((ch) => {
   if (activeTab === 'shots') { if (ch.lastShot && lbIndex < 0) renderShots(); return; }

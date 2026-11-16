@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <link rel="stylesheet" href="styles.css">
@@ -15,27 +15,27 @@
   <div class="muted small" style="margin:10px 0 6px;" id="current"></div>
 
   <div class="grid">
-    <div class="tile"><div class="v" id="atDesk">—</div><div class="k">За компом сегодня</div></div>
-    <div class="tile"><div class="v" id="phone">—</div><div class="k">Из них в телефоне</div></div>
-    <div class="tile"><div class="v" id="breaks">—</div><div class="k">Перерывов</div></div>
-    <div class="tile"><div class="v" id="longest">—</div><div class="k">Самая длинная сессия</div></div>
+    <div class="tile"><div class="v" id="atDesk">—</div><div class="k">At the computer today</div></div>
+    <div class="tile"><div class="v" id="phone">—</div><div class="k">Of that, on the phone</div></div>
+    <div class="tile"><div class="v" id="breaks">—</div><div class="k">Breaks</div></div>
+    <div class="tile"><div class="v" id="longest">—</div><div class="k">Longest session</div></div>
   </div>
 
   <div class="muted small" id="browserLine" style="margin-top:8px;"></div>
   <div class="small" id="shotResult" style="margin-top:4px;"></div>
 
-  <h2>Сессии сегодня</h2>
+  <h2>Today's sessions</h2>
   <table id="sessions"><tbody></tbody></table>
 
   <div class="row" style="margin-top:12px;">
-    <button id="stats">Статистика и настройки</button>
-    <button id="calibrate" title="Смотрите в экран 5 секунд">Калибровка</button>
-    <button id="shot" title="Скриншот текущей вкладки">📸</button>
+    <button id="stats">Stats &amp; settings</button>
+    <button id="calibrate" title="Look at the screen for 5 seconds">Calibrate</button>
+    <button id="shot" title="Screenshot of the current tab">📸</button>
   </div>
 
   <details style="margin-top:12px;">
-    <summary class="small muted">Что видит модель прямо сейчас</summary>
-    <div class="signals" id="signals">Нет данных (камера выключена?)</div>
+    <summary class="small muted">What the model sees right now</summary>
+    <div class="signals" id="signals">No data (is the camera off?)</div>
   </details>
 
   <script type="module" src="popup.js"></script>

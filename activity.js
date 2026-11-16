@@ -1,10 +1,9 @@
-// Отслеживание вкладок, фокуса браузера и периодические скриншоты.
-// Работает в service worker. Всё состояние, которое нужно пережить выгрузку воркера,
-// лежит в chrome.storage.session (очищается при перезапуске браузера) и IndexedDB.
+// Tab tracking, browser focus and periodic screenshots. Runs in the service worker;
+// state that must survive worker unloads lives in chrome.storage.session and IndexedDB.
 import * as db from './db.js';
 import { getSettings } from './common.js';
 
-const GAP_MS = 3 * 60000;      // если интервал не обновлялся 3 мин — был сон/выгрузка, разрываем
+const GAP_MS = 3 * 60000; // no update for 3 min means sleep or unload: split the interval
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn).catch(e => console.error('[activity]', e)));
 
@@ -25,7 +24,7 @@ async function isLocked() {
   try { return (await chrome.idle.queryState(60)) === 'locked'; } catch { return false; }
 }
 
-// Пауза: отслеживание выключено, экран заблокирован или камера видит, что вы отошли
+// Paused when tracking is off, the screen is locked or the camera says you're away
 async function isPaused(s) {
   if (!s.trackTabs) return true;
   if (await isLocked()) return true;
@@ -33,7 +32,6 @@ async function isPaused(s) {
   return s.enabled && currentState === 'away';
 }
 
-// ---------- журнал вкладок ----------
 async function tabMap() { return (await sget('tabMap')) || {}; }
 
 async function openTabRecord(tab, restored = false) {
@@ -69,7 +67,6 @@ async function closeTabRecord(tabId) {
   await sset({ tabMap: map });
 }
 
-// ---------- текущий интервал активности ----------
 async function finish(rec, at) {
   rec.end = Math.max(rec.start, at);
   rec.open = false;
@@ -125,18 +122,16 @@ async function refreshInner() {
   await notify();
 }
 
-// ---------- инициализация после старта браузера / обновления расширения ----------
+// Runs once per browser session (or after the extension is reloaded)
 async function initInner() {
   if (await sget('inited')) return;
   const now = Date.now();
   const { lastAlive = now } = await chrome.storage.local.get('lastAlive');
-  const recentlyAlive = now - lastAlive < GAP_MS; // расширение перезагрузили, а не браузер
+  const recentlyAlive = now - lastAlive < GAP_MS; // extension reloaded, browser kept running
 
-  // Незакрытый интервал активности — закрываем на последнем известном моменте
   const last = await db.lastIn('activity');
   if (last && last.open) await finish(last, last.end);
 
-  // Вкладки, которые были открыты: если браузер не перезапускался — продолжаем их записи
   const tabs = await chrome.tabs.query({});
   const byId = new Map(tabs.map(t => [t.id, t]));
   const openRecs = (await db.overlapping('tablog', now - 1, Infinity)).filter(r => r.end === Infinity);
@@ -153,7 +148,7 @@ async function initInner() {
 
 const run = (fn) => serial(async () => { await initInner(); await fn(); });
 
-// ---------- скриншоты ----------
+// Screenshots
 function excluded(domain, list) {
   return String(list || '').split(/[\s,]+/).map(x => x.trim().toLowerCase()).filter(Boolean)
     .some(d => domain === d || domain.endsWith('.' + d));
@@ -173,30 +168,30 @@ export async function captureShot({ manual = false } = {}) {
   const result = async (r) => { await chrome.storage.local.set({ lastShot: { ts: Date.now(), ...r } }); return r; };
 
   if (!manual) {
-    if (!s.screenshotsEnabled) return result({ skipped: 'выключено' });
-    if (await isLocked()) return result({ skipped: 'экран заблокирован' });
+    if (!s.screenshotsEnabled) return result({ skipped: 'disabled' });
+    if (await isLocked()) return result({ skipped: 'screen locked' });
     const { currentState } = await chrome.storage.local.get('currentState');
-    if (s.screenshotSkipWhenAway && s.enabled && currentState === 'away') return result({ skipped: 'вы отошли' });
+    if (s.screenshotSkipWhenAway && s.enabled && currentState === 'away') return result({ skipped: 'you are away' });
   }
 
   let win = null;
   try { win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }); } catch {}
-  if (!win || win.state === 'minimized') return result({ skipped: 'браузер свёрнут' });
+  if (!win || win.state === 'minimized') return result({ skipped: 'browser minimized' });
   const [tab] = await chrome.tabs.query({ active: true, windowId: win.id });
-  if (!tab) return result({ skipped: 'нет активной вкладки' });
+  if (!tab) return result({ skipped: 'no active tab' });
   const url = tabUrl(tab);
   const domain = domainOf(url);
-  if (excluded(domain, s.screenshotExclude)) return result({ skipped: `сайт в исключениях (${domain})` });
-  if (url.startsWith(chrome.runtime.getURL(''))) return result({ skipped: 'открыта страница расширения' });
+  if (excluded(domain, s.screenshotExclude)) return result({ skipped: `excluded site (${domain})` });
+  if (url.startsWith(chrome.runtime.getURL(''))) return result({ skipped: 'extension page is open' });
 
   let dataUrl;
   try {
     dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 90 });
   } catch (e) {
-    return result({ error: e.message }); // например, страницы chrome:// снимать нельзя
+    return result({ error: e.message }); // e.g. chrome:// pages can't be captured
   }
 
-  // Уменьшаем и пережимаем, чтобы скриншот занимал ~100 КБ
+  // Downscale and recompress to roughly 100 KB
   const bmp = await createImageBitmap(dataUrlToBlob(dataUrl));
   const scale = Math.min(1, s.screenshotMaxWidth / bmp.width);
   const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
@@ -228,10 +223,9 @@ export async function prune() {
   await db.deleteBefore('shots', 'ts', now - s.shotsKeepDays * 86400000);
 }
 
-// ---------- публичное API для background.js ----------
 export const refresh = () => run(refreshInner);
 
-// lastAlive пишем ПОСЛЕ инициализации: по нему initInner понимает, перезапускался ли браузер
+// Written after init: initInner uses it to tell a browser restart from an extension reload
 const alive = () => chrome.storage.local.set({ lastAlive: Date.now() });
 
 export function tick() {
@@ -251,7 +245,7 @@ export function register() {
     const map = await tabMap();
     if (map[removed]) { map[added] = map[removed]; delete map[removed]; await sset({ tabMap: map }); }
   }));
-  // При переключении между окнами Chrome сначала приходит "фокус потерян" — ждём немного, чтобы не мигать
+  // Switching Chrome windows first reports "no focus"; debounce to avoid flicker
   chrome.windows.onFocusChanged.addListener(() => {
     clearTimeout(focusTimer);
     focusTimer = setTimeout(() => refresh(), 600);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Скачивает библиотеку MediaPipe Tasks Vision и две модели в папку расширения.
-# Запуск:  bash setup-models.sh
+# Downloads MediaPipe Tasks Vision and two models into the extension folder.
+# Usage: bash setup-models.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -8,7 +8,7 @@ V="0.10.14"
 CDN="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@$V"
 mkdir -p vendor/wasm models
 
-get() { echo "Скачиваю $1 ..."; curl -fL --retry 3 -o "$1" "$2"; }
+get() { echo "Downloading $1 ..."; curl -fL --retry 3 -o "$1" "$2"; }
 
 get vendor/vision_bundle.mjs                     "$CDN/vision_bundle.mjs"
 get vendor/wasm/vision_wasm_internal.js          "$CDN/wasm/vision_wasm_internal.js"
@@ -19,4 +19,4 @@ get models/face_landmarker.task      "https://storage.googleapis.com/mediapipe-m
 get models/efficientdet_lite0.tflite "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite"
 
 echo
-echo "Готово. Откройте chrome://extensions и нажмите «Обновить» у Desk Time Tracker."
+echo "Done. Open chrome://extensions and click Reload on Desk Time Tracker."

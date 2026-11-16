@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Desk Time Tracker — настройка</title>
+  <title>Desk Time Tracker — setup</title>
   <link rel="stylesheet" href="styles.css">
   <style>
     main { max-width: 640px; margin: 40px auto; padding: 0 20px; }
@@ -16,24 +16,24 @@
 <body>
 <main>
   <h1>Desk Time Tracker</h1>
-  <p class="muted">Кадры с камеры обрабатываются локально в браузере и никуда не сохраняются и не отправляются. Сохраняется только история состояний: «за компьютером / в телефоне / отошёл».</p>
+  <p class="muted">Camera frames are processed locally in the browser and are never stored or sent anywhere. Only the state history is saved: at the computer / on the phone / away.</p>
 
   <div class="step">
-    <h2>1. Модели</h2>
-    <div id="models">Проверяю…</div>
+    <h2>1. Models</h2>
+    <div id="models">Checking…</div>
   </div>
 
   <div class="step">
-    <h2>2. Доступ к камере</h2>
-    <p class="muted small">Chrome спросит разрешение один раз — после этого расширение сможет работать с камерой в фоне.</p>
-    <div class="row"><button class="primary" id="grant">Разрешить камеру</button><span id="camStatus"></span></div>
+    <h2>2. Camera access</h2>
+    <p class="muted small">Chrome asks for permission once. After that the extension can use the camera in the background.</p>
+    <div class="row"><button class="primary" id="grant">Allow camera</button><span id="camStatus"></span></div>
     <video id="preview" playsinline muted></video>
   </div>
 
   <div class="step">
-    <h2>3. Запуск и калибровка</h2>
-    <p class="muted small">Сядьте как обычно и смотрите в экран. Калибровка 5 секунд запомнит положение вашей головы, чтобы отличать взгляд в экран от взгляда вниз на телефон.</p>
-    <div class="row"><button class="primary" id="startCal" disabled>Запустить и откалибровать</button><span id="calStatus"></span></div>
+    <h2>3. Start and calibrate</h2>
+    <p class="muted small">Sit as usual and look at the screen. A 5-second calibration records your head position so the tracker can tell looking at the screen from looking down at a phone.</p>
+    <div class="row"><button class="primary" id="startCal" disabled>Start and calibrate</button><span id="calStatus"></span></div>
   </div>
 </main>
 <script type="module" src="setup.js"></script>

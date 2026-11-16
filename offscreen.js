@@ -1,9 +1,8 @@
-// Offscreen-документ: держит камеру и раз в секунду прогоняет кадр через две локальные модели MediaPipe:
-//  1) FaceLandmarker — есть ли лицо, наклон головы, куда смотрят глаза
-//  2) ObjectDetector (EfficientDet, классы COCO) — есть ли в кадре "person" и "cell phone"
+// Holds the camera and runs each frame through two local MediaPipe models:
+// FaceLandmarker (face, head tilt, gaze) and ObjectDetector (COCO "person" and "cell phone").
 import { FilesetResolver, FaceLandmarker, ObjectDetector } from './vendor/vision_bundle.mjs';
 
-// Глушим служебные логи MediaPipe (I/W-сообщения), чтобы Chrome не показывал их как ошибки
+// Silence MediaPipe's info/warning logs so Chrome doesn't list them as extension errors
 for (const level of ['error', 'warn']) {
   const orig = console[level].bind(console);
   console[level] = (...args) => {
@@ -18,17 +17,16 @@ const send = (msg) => chrome.runtime.sendMessage(msg).catch(() => {});
 
 let settings;
 let faceModel, objModel, video, timer;
-let stable = null;            // текущее подтверждённое состояние
-const history = [];           // [{t, s}] сырые состояния за последние 2 минуты
-let calibration = null;       // { until, values: [] }
+let stable = null;
+const history = [];
+let calibration = null;
 let lastHeartbeat = 0;
 
 async function createModel(Task, fileset, options) {
-  // Сначала пробуем GPU, при ошибке — CPU
   try {
     return await Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'GPU' } });
   } catch (e) {
-    console.warn('GPU недоступен, использую CPU', e);
+    console.warn('GPU unavailable, falling back to CPU', e);
     return await Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } });
   }
 }
@@ -72,11 +70,10 @@ async function openCamera() {
   video = document.getElementById('cam');
   video.srcObject = stream;
   await video.play();
-  // Камера отключилась (сон, выдернули USB) — переподключаемся
   stream.getVideoTracks()[0].onended = () => reopenCamera();
 }
 
-// После сна ноутбука поток может "замёрзнуть": кадр не меняется. Тогда переоткрываем камеру.
+// After sleep the stream may freeze on the last frame; reopen the camera in that case
 let reopening = false, lastVideoTime = -1, frozenTicks = 0, lastTickAt = Date.now();
 async function reopenCamera() {
   if (reopening) return;
@@ -87,7 +84,7 @@ async function reopenCamera() {
     catch { await new Promise(r => setTimeout(r, 3000)); }
   }
   reopening = false;
-  send({ type: 'error', error: 'camera', message: 'Камера пропала и не переподключилась' });
+  send({ type: 'error', error: 'camera', message: 'The camera was lost and could not reconnect' });
 }
 
 function schedule() {
@@ -111,8 +108,7 @@ function analyze() {
   let ratio = null, eyeDown = 0;
   if (faceFound) {
     const lm = face.faceLandmarks[0];
-    // 10 — верх лба, 1 — кончик носа, 152 — подбородок.
-    // Когда голова наклоняется вниз, нос в проекции "сползает" к подбородку и ratio растёт.
+    // Landmarks: 10 = top of forehead, 1 = nose tip, 152 = chin. The ratio grows as the head tilts down.
     ratio = (lm[1].y - lm[10].y) / (lm[152].y - lm[10].y);
     const cats = face.faceBlendshapes?.[0]?.categories || [];
     const get = (n) => cats.find(c => c.categoryName === n)?.score || 0;
@@ -139,8 +135,7 @@ function delayFor(state) {
   return Math.min(sec, 110) * 1000;
 }
 
-// Сглаживание: состояние меняется, только если новое "сырое" состояние держится
-// заданное время в ≥75% кадров. Это убирает мигание из-за отдельных ошибок модели.
+// Smoothing: switch state only if the new raw state holds in >=75% of frames for the configured delay
 function updateState(raw) {
   const t = Date.now();
   history.push({ t, s: raw });
@@ -149,7 +144,7 @@ function updateState(raw) {
   for (const s of ['away', 'phone', 'present']) {
     if (s === stable) continue;
     const need = delayFor(s);
-    if (t - history[0].t < need - settings.intervalMs) continue; // мало данных
+    if (t - history[0].t < need - settings.intervalMs) continue;
     const win = history.filter(h => t - h.t <= need);
     if (!win.length) continue;
     const frac = win.filter(h => h.s === s).length / win.length;
@@ -164,7 +159,7 @@ function updateState(raw) {
 
 function tick() {
   const now = Date.now();
-  // Таймер "проспал" больше 30 с — компьютер был во сне. Старая история кадров больше не актуальна.
+  // The timer slept for over 30 s, so the computer was asleep: drop stale history
   if (now - lastTickAt > 30000) { history.length = 0; stable = null; reopenCamera(); }
   lastTickAt = now;
 
@@ -186,7 +181,6 @@ function tick() {
     if (Date.now() > calibration.until) finishCalibration();
   }
 
-  // Живые сигналы для попапа (если он открыт)
   send({ type: 'raw', ...r, stable, calibrating: !!calibration });
 
   if (Date.now() - lastHeartbeat > 15000) {
@@ -199,7 +193,7 @@ function finishCalibration() {
   const v = calibration.values.sort((a, b) => a - b);
   calibration = null;
   if (v.length < 3) {
-    send({ type: 'calibrationFailed', reason: 'Лицо не найдено в кадре' });
+    send({ type: 'calibrationFailed', reason: 'No face found in the frame' });
     return;
   }
   const median = v[Math.floor(v.length / 2)];

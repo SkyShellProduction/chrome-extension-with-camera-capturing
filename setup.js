@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let modelsOk = false, camOk = false;
 
 const REQUIRED = [
@@ -19,17 +20,17 @@ async function checkModels() {
   }
   modelsOk = missing.length === 0;
   $('models').innerHTML = modelsOk
-    ? '<span class="ok">✓ Все файлы моделей на месте</span>'
-    : `<span class="bad">Не хватает файлов:</span><ul>${missing.map(m => `<li><code>${m}</code></li>`).join('')}</ul>
-       <p class="small">Запустите в папке расширения <code>setup-models.ps1</code> (Windows) или <code>setup-models.sh</code> (macOS/Linux),
-       затем нажмите «Обновить» у расширения на <code>chrome://extensions</code> и откройте эту страницу снова.</p>`;
+    ? '<span class="ok">✓ All model files are in place</span>'
+    : `<span class="bad">Missing files:</span><ul>${missing.map(m => `<li><code>${m}</code></li>`).join('')}</ul>
+       <p class="small">Run <code>setup-models.sh</code> (macOS/Linux) or <code>setup-models.ps1</code> (Windows) in the extension folder,
+       then click Reload on <code>chrome://extensions</code> and open this page again.</p>`;
   updateButtons();
 }
 
 async function checkCamPermission() {
   try {
     const p = await navigator.permissions.query({ name: 'camera' });
-    if (p.state === 'granted') { camOk = true; $('camStatus').innerHTML = '<span class="ok">✓ Разрешение уже есть</span>'; }
+    if (p.state === 'granted') { camOk = true; $('camStatus').innerHTML = '<span class="ok">✓ Permission already granted</span>'; }
   } catch {}
   updateButtons();
 }
@@ -40,11 +41,11 @@ $('grant').onclick = async () => {
     const v = $('preview');
     v.srcObject = stream; v.style.display = 'block'; await v.play();
     camOk = true;
-    $('camStatus').innerHTML = '<span class="ok">✓ Доступ получен</span>';
-    // Превью показываем 3 секунды, потом освобождаем камеру для фонового режима
+    $('camStatus').innerHTML = '<span class="ok">✓ Access granted</span>';
+    // Show a short preview, then release the camera for background use
     setTimeout(() => { stream.getTracks().forEach(t => t.stop()); v.style.display = 'none'; }, 3000);
   } catch (e) {
-    $('camStatus').innerHTML = `<span class="bad">${e.name}: ${e.message}</span>`;
+    $('camStatus').innerHTML = `<span class="bad">${esc(e.name)}: ${esc(e.message)}</span>`;
   }
   updateButtons();
 };
@@ -53,34 +54,35 @@ function updateButtons() {
   $('startCal').disabled = !(modelsOk && camOk);
 }
 
+let calibSent = true;
+
 $('startCal').onclick = async () => {
   $('startCal').disabled = true;
-  $('calStatus').textContent = 'Загружаю модели…';
+  $('calStatus').textContent = 'Loading models…';
   await chrome.storage.local.remove('lastError');
   calibSent = false;
+  // If the tracker is already running there is no 'ready' message, so live 'raw' messages trigger calibration
   await chrome.runtime.sendMessage({ type: 'start' });
-  // Если трекер уже был запущен, сигнала 'ready' не будет — калибруем по живым данным
 };
 
-let calibSent = true;
 function startCalibration() {
   if (calibSent) return;
   calibSent = true;
-  $('calStatus').textContent = 'Смотрите в экран 5 секунд…';
+  $('calStatus').textContent = 'Look at the screen for 5 seconds…';
   setTimeout(() => chrome.runtime.sendMessage({ target: 'offscreen', type: 'calibrate' }), 1000);
 }
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'ready' || msg.type === 'raw') startCalibration();
   if (msg.type === 'calibrated') {
-    $('calStatus').innerHTML = '<span class="ok">✓ Готово! Трекер работает. Эту вкладку можно закрыть.</span>';
+    $('calStatus').innerHTML = '<span class="ok">✓ Done! The tracker is running. You can close this tab.</span>';
   }
   if (msg.type === 'calibrationFailed') {
-    $('calStatus').innerHTML = `<span class="bad">${msg.reason}. Сядьте напротив камеры и попробуйте снова.</span>`;
+    $('calStatus').innerHTML = `<span class="bad">${esc(msg.reason)}. Sit in front of the camera and try again.</span>`;
     $('startCal').disabled = false;
   }
   if (msg.type === 'error') {
-    $('calStatus').innerHTML = `<span class="bad">Ошибка (${msg.error}): ${msg.message}</span>`;
+    $('calStatus').innerHTML = `<span class="bad">Error (${esc(msg.error)}): ${esc(msg.message)}</span>`;
     $('startCal').disabled = false;
   }
 });

@@ -8,19 +8,20 @@ async function render() {
   const { currentState, lastError } = await chrome.storage.local.get(['currentState', 'lastError']);
   const state = settings.enabled ? (currentState && currentState !== 'off' ? currentState : null) : 'off';
 
-  $('statusText').textContent = state ? STATE_LABELS[state] : 'Запуск…';
+  $('statusText').textContent = state ? STATE_LABELS[state] : 'Starting…';
   $('statusDot').style.background = STATE_COLORS[state] || '#999';
-  $('toggle').textContent = settings.enabled ? 'Выключить' : 'Включить';
+  $('toggle').textContent = settings.enabled ? 'Turn off' : 'Turn on';
   $('toggle').className = settings.enabled ? '' : 'primary';
   $('calibrate').disabled = !settings.enabled;
 
   if (lastError) {
     const hint = lastError.kind === 'models'
-      ? 'Не найдены файлы моделей. Запустите скрипт setup-models из папки расширения и перезагрузите расширение.'
-      : 'Нет доступа к камере. Откройте страницу настройки и выдайте разрешение.';
+      ? 'Model files not found. Run the setup-models script in the extension folder and reload the extension.'
+      : 'No camera access. Open the setup page and grant permission.';
     $('error').style.display = '';
-    $('error').innerHTML = `<b>${hint}</b><br><span class="muted">${lastError.message}</span>
-      <div style="margin-top:6px"><button id="openSetup">Открыть настройку</button></div>`;
+    $('error').innerHTML = `<b>${hint}</b><br><span class="muted"></span>
+      <div style="margin-top:6px"><button id="openSetup">Open setup</button></div>`;
+    $('error').querySelector('.muted').textContent = lastError.message;
     $('openSetup').onclick = () => chrome.tabs.create({ url: 'setup.html' });
   } else {
     $('error').style.display = 'none';
@@ -35,14 +36,13 @@ async function render() {
 
   const last = st.sessions[st.sessions.length - 1];
   if (last && last.open && state !== 'away') {
-    $('current').textContent = `Текущая сессия: ${fmtDur(last.end - last.start)} без перерыва (с ${fmtTime(last.start)})`;
-  } else if (st.breaks.length || st.sessions.length) {
-    $('current').textContent = last ? `Последняя сессия закончилась в ${fmtTime(last.end)}` : '';
+    $('current').textContent = `Current session: ${fmtDur(last.end - last.start)} without a break (since ${fmtTime(last.start)})`;
+  } else if (st.sessions.length) {
+    $('current').textContent = `Last session ended at ${fmtTime(last.end)}`;
   } else {
-    $('current').textContent = settings.enabled ? 'Сегодня данных пока нет' : '';
+    $('current').textContent = settings.enabled ? 'No data for today yet' : '';
   }
 
-  // Браузер сегодня: время во вкладках и топ-сайт
   const now = Date.now();
   const acts = (await db.overlapping('activity', from, to))
     .map(a => ({ ...a, start: Math.max(a.start, from), end: Math.min(a.open && now - a.end < 180000 ? now : a.end, to) }))
@@ -52,16 +52,16 @@ async function render() {
   const total = acts.reduce((x, a) => x + a.end - a.start, 0);
   const topSite = [...bySite.entries()].sort((a, b) => b[1] - a[1])[0];
   $('browserLine').textContent = total
-    ? `В браузере сегодня ${fmtDur(total)}; больше всего — ${topSite[0]} (${fmtDur(topSite[1])})`
-    : (settings.trackTabs ? 'Активности во вкладках сегодня пока нет' : '');
+    ? `In the browser today: ${fmtDur(total)}; most time on ${topSite[0]} (${fmtDur(topSite[1])})`
+    : (settings.trackTabs ? 'No tab activity today yet' : '');
 
   const tbody = $('sessions').querySelector('tbody');
   tbody.innerHTML = st.sessions.length
     ? st.sessions.slice().reverse().map(s => `<tr>
-        <td>${fmtTime(s.start)}–${s.open ? 'сейчас' : fmtTime(s.end)}</td>
+        <td>${fmtTime(s.start)}–${s.open ? 'now' : fmtTime(s.end)}</td>
         <td>${fmtDur(s.end - s.start)}</td>
         <td class="muted">📱 ${fmtDur(s.phone)}</td></tr>`).join('')
-    : '<tr><td class="muted">Пока пусто</td></tr>';
+    : '<tr><td class="muted">Nothing yet</td></tr>';
 }
 
 $('toggle').onclick = async () => {
@@ -78,14 +78,15 @@ $('shot').onclick = async () => {
   $('shot').disabled = true;
   const r = await chrome.runtime.sendMessage({ type: 'shotNow' });
   $('shot').disabled = false;
-  $('shotResult').innerHTML = r?.ok ? `<span style="color:var(--present)">Скриншот сохранён (${Math.round(r.size / 1024)} КБ)</span>`
-    : `<span style="color:var(--err)"></span>`;
-  if (!r?.ok) $('shotResult').firstChild.textContent = r?.skipped || r?.error || 'Не получилось';
+  const span = document.createElement('span');
+  span.style.color = r?.ok ? 'var(--present)' : 'var(--err)';
+  span.textContent = r?.ok ? `Screenshot saved (${Math.round(r.size / 1024)} KB)` : (r?.skipped || r?.error || 'Failed');
+  $('shotResult').replaceChildren(span);
 };
 
 $('calibrate').onclick = () => {
   chrome.runtime.sendMessage({ target: 'offscreen', type: 'calibrate' });
-  $('calibrate').textContent = 'Смотрите в экран…';
+  $('calibrate').textContent = 'Look at the screen…';
   $('calibrate').disabled = true;
 };
 
@@ -93,21 +94,21 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'raw') {
     const f = (x) => (x == null ? '—' : x.toFixed(2));
     $('signals').textContent =
-      `сырое состояние : ${STATE_LABELS[msg.raw]}\n` +
-      `лицо в кадре    : ${msg.faceFound ? 'да' : 'нет'}\n` +
-      `наклон головы   : ${f(msg.ratio)} ${msg.headDown ? '(вниз)' : ''}\n` +
-      `глаза вниз      : ${f(msg.eyeDown)}\n` +
-      `телефон         : ${f(msg.phoneScore)}\n` +
-      `человек         : ${f(msg.personScore)}` +
-      (msg.calibrating ? '\n\nКАЛИБРОВКА… смотрите в экран' : '');
+      `raw state  : ${STATE_LABELS[msg.raw]}\n` +
+      `face found : ${msg.faceFound ? 'yes' : 'no'}\n` +
+      `head tilt  : ${f(msg.ratio)} ${msg.headDown ? '(down)' : ''}\n` +
+      `eyes down  : ${f(msg.eyeDown)}\n` +
+      `phone      : ${f(msg.phoneScore)}\n` +
+      `person     : ${f(msg.personScore)}` +
+      (msg.calibrating ? '\n\nCALIBRATING… look at the screen' : '');
   }
   if (msg.type === 'calibrated') {
-    $('calibrate').textContent = 'Готово ✓';
-    setTimeout(() => { $('calibrate').textContent = 'Калибровка'; $('calibrate').disabled = false; }, 1500);
+    $('calibrate').textContent = 'Done ✓';
+    setTimeout(() => { $('calibrate').textContent = 'Calibrate'; $('calibrate').disabled = false; }, 1500);
   }
   if (msg.type === 'calibrationFailed') {
-    $('calibrate').textContent = 'Лицо не найдено';
-    setTimeout(() => { $('calibrate').textContent = 'Калибровка'; $('calibrate').disabled = false; }, 2000);
+    $('calibrate').textContent = 'No face found';
+    setTimeout(() => { $('calibrate').textContent = 'Calibrate'; $('calibrate').disabled = false; }, 2000);
   }
 });
 

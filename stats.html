@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Desk Time Tracker — статистика</title>
+  <title>Desk Time Tracker — stats</title>
   <link rel="stylesheet" href="styles.css">
   <style>
     main { max-width: 1000px; margin: 24px auto 60px; padding: 0 20px; }
@@ -47,121 +47,117 @@
   <div class="row" style="justify-content: space-between;">
     <div><h1>Desk Time Tracker</h1><div class="muted" id="dayTitle"></div></div>
     <div class="row">
-      <button id="prev" title="Предыдущий день">←</button><input type="date" id="day"><button id="next" title="Следующий день">→</button>
-      <button id="today">Сегодня</button>
+      <button id="prev" title="Previous day">←</button><input type="date" id="day"><button id="next" title="Next day">→</button>
+      <button id="today">Today</button>
     </div>
   </div>
 
   <nav class="tabs">
-    <a href="#presence" data-tab="presence">Присутствие</a>
-    <a href="#tabs" data-tab="tabs">Вкладки</a>
-    <a href="#shots" data-tab="shots">Скриншоты</a>
-    <a href="#settings" data-tab="settings">Настройки и данные</a>
+    <a href="#presence" data-tab="presence">Presence</a>
+    <a href="#tabs" data-tab="tabs">Tabs</a>
+    <a href="#shots" data-tab="shots">Screenshots</a>
+    <a href="#settings" data-tab="settings">Settings &amp; data</a>
   </nav>
 
-  <!-- ================= ПРИСУТСТВИЕ ================= -->
   <section id="presence">
     <div class="tiles">
-      <div class="tile"><div class="v" id="tAtDesk">—</div><div class="k">За компьютером</div></div>
-      <div class="tile"><div class="v" id="tFocused">—</div><div class="k">Смотрел в экран</div></div>
-      <div class="tile"><div class="v" id="tPhone">—</div><div class="k">В телефоне</div></div>
-      <div class="tile"><div class="v" id="tLongest">—</div><div class="k">Самая длинная сессия</div></div>
-      <div class="tile"><div class="v" id="tAvg">—</div><div class="k">Средняя сессия</div></div>
+      <div class="tile"><div class="v" id="tAtDesk">—</div><div class="k">At the computer</div></div>
+      <div class="tile"><div class="v" id="tFocused">—</div><div class="k">Looking at the screen</div></div>
+      <div class="tile"><div class="v" id="tPhone">—</div><div class="k">On the phone</div></div>
+      <div class="tile"><div class="v" id="tLongest">—</div><div class="k">Longest session</div></div>
+      <div class="tile"><div class="v" id="tAvg">—</div><div class="k">Average session</div></div>
     </div>
 
-    <h2>Таймлайн дня</h2>
+    <h2>Day timeline</h2>
     <div class="timeline" id="timeline"></div>
     <div class="axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
     <div class="legend">
-      <span><i class="dot" style="background:var(--present)"></i>за компьютером</span>
-      <span><i class="dot" style="background:var(--phone)"></i>в телефоне</span>
-      <span><i class="dot" style="background:var(--away)"></i>отошёл</span>
-      <span class="muted">пусто — трекер был выключен</span>
+      <span><i class="dot" style="background:var(--present)"></i>at the computer</span>
+      <span><i class="dot" style="background:var(--phone)"></i>on the phone</span>
+      <span><i class="dot" style="background:var(--away)"></i>away</span>
+      <span class="muted">empty — tracker was off</span>
     </div>
 
-    <h2>Последние 14 дней</h2>
+    <h2>Last 14 days</h2>
     <div class="bars" id="bars"></div>
 
-    <h2>Сессии и перерывы</h2>
-    <table id="sessions"><thead><tr><th>Время</th><th>Длительность</th><th>Телефон</th><th>Перерыв после</th></tr></thead><tbody></tbody></table>
+    <h2>Sessions and breaks</h2>
+    <table id="sessions"><thead><tr><th>Time</th><th>Duration</th><th>Phone</th><th>Break after</th></tr></thead><tbody></tbody></table>
   </section>
 
-  <!-- ================= ВКЛАДКИ ================= -->
   <section id="tabs">
     <div class="tiles">
-      <div class="tile"><div class="v" id="bActive">—</div><div class="k">Браузер в фокусе</div></div>
-      <div class="tile"><div class="v" id="bBlur">—</div><div class="k">Браузер свёрнут / не в фокусе</div></div>
-      <div class="tile"><div class="v" id="bSites">—</div><div class="k">Разных сайтов</div></div>
-      <div class="tile"><div class="v" id="bOpened">—</div><div class="k">Вкладок открыто</div></div>
-      <div class="tile"><div class="v" id="bClosed">—</div><div class="k">Вкладок закрыто</div></div>
+      <div class="tile"><div class="v" id="bActive">—</div><div class="k">Browser in focus</div></div>
+      <div class="tile"><div class="v" id="bBlur">—</div><div class="k">Browser minimized / not in focus</div></div>
+      <div class="tile"><div class="v" id="bSites">—</div><div class="k">Different sites</div></div>
+      <div class="tile"><div class="v" id="bOpened">—</div><div class="k">Tabs opened</div></div>
+      <div class="tile"><div class="v" id="bClosed">—</div><div class="k">Tabs closed</div></div>
     </div>
-    <div id="tabsOff" class="err small" style="display:none;margin-top:10px;">Учёт вкладок выключен в настройках.</div>
+    <div id="tabsOff" class="err small" style="display:none;margin-top:10px;">Tab tracking is turned off in settings.</div>
 
-    <h2>Что было на экране браузера</h2>
+    <h2>What was on the browser screen</h2>
     <div class="timeline" id="bTimeline"></div>
     <div class="axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
-    <div class="legend"><span>цвет — сайт (наведите для подробностей)</span>
-      <span><i class="dot" style="background:var(--line)"></i>браузер свёрнут / в другом окне</span>
-      <span class="muted">пусто — пауза (отошли, экран заблокирован) или браузер закрыт</span></div>
+    <div class="legend"><span>color = site (hover for details)</span>
+      <span><i class="dot" style="background:var(--line)"></i>browser minimized / another window</span>
+      <span class="muted">empty — paused (away, screen locked) or browser closed</span></div>
 
-    <h2>Сайты по времени</h2>
+    <h2>Sites by time</h2>
     <div class="sites" id="sites"></div>
 
     <div class="row" style="justify-content: space-between; margin-top: 20px;">
-      <h2 style="margin:0">Журнал вкладок</h2>
-      <input type="search" id="tabFilter" placeholder="Поиск по названию или сайту">
+      <h2 style="margin:0">Tab log</h2>
+      <input type="search" id="tabFilter" placeholder="Search by title or site">
     </div>
-    <p class="muted small">«Активна» — сколько вкладка была на экране в этот день. «Жила» — от открытия до закрытия.</p>
-    <table id="tablog"><thead><tr><th>Открыта</th><th>Закрыта</th><th>Жила</th><th>Активна</th><th>Страница</th></tr></thead><tbody></tbody></table>
+    <p class="muted small">"Active" is how long the tab was on screen that day. "Lifetime" is from opening to closing.</p>
+    <table id="tablog"><thead><tr><th>Opened</th><th>Closed</th><th>Lifetime</th><th>Active</th><th>Page</th></tr></thead><tbody></tbody></table>
   </section>
 
-  <!-- ================= СКРИНШОТЫ ================= -->
   <section id="shots">
     <div class="row" style="justify-content: space-between;">
       <div class="muted small" id="shotsInfo"></div>
-      <span class="muted small">Снять вручную — кнопкой 📸 в окне расширения</span>
+      <span class="muted small">To take one manually, use the 📸 button in the extension popup</span>
     </div>
     <div class="small" id="lastShot" style="margin:8px 0 14px;"></div>
     <div class="shots" id="shotGrid"></div>
   </section>
 
-  <!-- ================= НАСТРОЙКИ ================= -->
   <section id="settings">
     <div class="cols">
       <div>
-        <h2>Камера и присутствие</h2>
+        <h2>Camera and presence</h2>
         <form id="settingsPresence"></form>
-        <div class="row" style="margin-top:10px;"><button id="setup">Камера / калибровка</button></div>
+        <div class="row" style="margin-top:10px;"><button id="setup">Camera / calibration</button></div>
       </div>
       <div>
-        <h2>Вкладки и скриншоты</h2>
+        <h2>Tabs and screenshots</h2>
         <form id="settingsTabs"></form>
         <div style="margin-top:8px;">
-          <div class="small" style="margin-bottom:4px;">Не делать скриншоты на сайтах (через пробел или с новой строки, поддомены учитываются):</div>
-          <textarea id="screenshotExclude" placeholder="bank.uz mail.google.com"></textarea>
+          <div class="small" style="margin-bottom:4px;">No screenshots on these sites (space- or newline-separated, subdomains included):</div>
+          <textarea id="screenshotExclude" placeholder="mybank.com mail.google.com"></textarea>
         </div>
       </div>
     </div>
-    <div class="row" style="margin-top:12px;"><button id="save" class="primary">Сохранить настройки</button></div>
+    <div class="row" style="margin-top:12px;"><button id="save" class="primary">Save settings</button></div>
 
-    <h2>Данные</h2>
+    <h2>Data</h2>
     <div class="muted small" id="usage" style="margin-bottom:8px;"></div>
     <div class="row">
-      <button id="export">Экспорт JSON</button>
-      <button id="import">Импорт JSON</button>
-      <button id="clear">Очистить историю</button>
-      <button id="clearShots">Удалить все скриншоты</button>
+      <button id="export">Export JSON</button>
+      <button id="import">Import JSON</button>
+      <button id="clear">Clear history</button>
+      <button id="clearShots">Delete all screenshots</button>
     </div>
     <div class="row small" style="margin-top:8px;">
       <select id="importMode">
-        <option value="merge">Объединить с текущей историей</option>
-        <option value="replace">Заменить текущую историю</option>
+        <option value="merge">Merge with current history</option>
+        <option value="replace">Replace current history</option>
       </select>
-      <label><input type="checkbox" id="importSettings"> и настройки из файла</label>
+      <label><input type="checkbox" id="importSettings"> and settings from the file</label>
     </div>
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <div class="small" id="importResult" style="margin-top:8px;"></div>
-    <p class="muted small">Экспорт включает присутствие, активность во вкладках и журнал вкладок. Скриншоты в JSON не попадают — их можно скачать по одному из галереи.</p>
+    <p class="muted small">The export includes presence, tab activity and the tab log. Screenshots are not included; download them one by one from the gallery.</p>
   </section>
 </main>
 
@@ -171,9 +167,9 @@
     <button id="lbPrev">←</button>
     <span id="lbMeta" class="ellipsis" style="max-width:60vw"></span>
     <button id="lbNext">→</button>
-    <a id="lbDownload" download>Скачать</a>
-    <button id="lbDelete">Удалить</button>
-    <button id="lbClose">Закрыть (Esc)</button>
+    <a id="lbDownload" download>Download</a>
+    <button id="lbDelete">Delete</button>
+    <button id="lbClose">Close (Esc)</button>
   </div>
 </div>
 
