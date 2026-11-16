@@ -1,0 +1,52 @@
+README.md
+  h_daad3f85c01777 1-105
+activity.js
+  h_daad3f85c01777 1-264
+background.js
+  h_daad3f85c01777 1-260
+common.js
+  h_daad3f85c01777 1-128
+db.js
+  h_daad3f85c01777 1-225
+manifest.json
+  h_daad3f85c01777 1-29
+offscreen.html
+  h_daad3f85c01777 1-8
+offscreen.js
+  h_daad3f85c01777 1-222
+popup.html
+  h_daad3f85c01777 1-43
+popup.js
+  h_daad3f85c01777 1-116
+setup-models.ps1
+  h_daad3f85c01777 1-28
+setup-models.sh
+  h_daad3f85c01777 1-22
+setup.html
+  h_daad3f85c01777 1-41
+setup.js
+  h_daad3f85c01777 1-89
+stats.html
+  h_daad3f85c01777 1-182
+stats.js
+  h_daad3f85c01777 1-385
+styles.css
+  h_daad3f85c01777 1-39
+vendor/vision_bundle.mjs
+  h_daad3f85c01777 1-2
+vendor/wasm/vision_wasm_internal.js
+  h_daad3f85c01777 1-20
+vendor/wasm/vision_wasm_nosimd_internal.js
+  h_daad3f85c01777 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a75127684a474dc2a79eb0f0936ec65e8c871c14",
+  "prompts": {},
+  "humans": {
+    "h_daad3f85c01777": {
+      "author": "Vladimir Drozdov <Vladimir.Drozdov@ventionteams.com>"
+    }
+  }
+}
