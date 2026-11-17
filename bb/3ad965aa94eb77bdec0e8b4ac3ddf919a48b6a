@@ -1,0 +1,14 @@
+activity.js
+  h_daad3f85c01777 157-174,204-205,211-215
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb3ad965aa94eb77bdec0e8b4ac3ddf919a48b6a",
+  "prompts": {},
+  "humans": {
+    "h_daad3f85c01777": {
+      "author": "Vladimir Drozdov <Vladimir.Drozdov@ventionteams.com>"
+    }
+  }
+}
