@@ -154,6 +154,24 @@ function excluded(domain, list) {
     .some(d => domain === d || domain.endsWith('.' + d));
 }
 
+// Host permissions only cover http(s) sites; browser pages, the Web Store and (by default) local files are off-limits
+async function captureBlockReason(url) {
+  let u;
+  try { u = new URL(url); } catch { return 'page has no address yet'; }
+  if (u.protocol === 'file:') {
+    let allowed = false;
+    try { allowed = await chrome.extension.isAllowedFileSchemeAccess(); } catch {}
+    return allowed ? null : 'local file: enable "Allow access to file URLs" in the extension details to capture these';
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+    return `browser page (${url.split(/[?#]/)[0]}) can't be captured`;
+  }
+  if (u.hostname === 'chromewebstore.google.com' || (u.hostname === 'chrome.google.com' && u.pathname.startsWith('/webstore'))) {
+    return "the Chrome Web Store can't be captured";
+  }
+  return null;
+}
+
 function dataUrlToBlob(dataUrl) {
   const [head, b64] = dataUrl.split(',');
   const mime = head.match(/data:(.*?);/)?.[1] || 'image/jpeg';
@@ -183,12 +201,18 @@ export async function captureShot({ manual = false } = {}) {
   const domain = domainOf(url);
   if (excluded(domain, s.screenshotExclude)) return result({ skipped: `excluded site (${domain})` });
   if (url.startsWith(chrome.runtime.getURL(''))) return result({ skipped: 'extension page is open' });
+  const blocked = await captureBlockReason(url);
+  if (blocked) return result({ skipped: blocked });
 
   let dataUrl;
   try {
     dataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: 'jpeg', quality: 90 });
   } catch (e) {
-    return result({ error: e.message }); // e.g. chrome:// pages can't be captured
+    // Chrome reports any page it won't let extensions capture as an 'activeTab' error
+    if (/activeTab|Cannot access|cannot be scripted|permission/i.test(e.message)) {
+      return result({ skipped: `this page can't be captured (${domain || url || 'unknown'})` });
+    }
+    return result({ error: e.message });
   }
 
   // Downscale and recompress to roughly 100 KB
